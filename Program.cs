@@ -16,7 +16,18 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddTransient<MiddlewareToken>();
 
 // setting for JWT
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("this is my custom secret key for authentication")),
+            ValidIssuer = "https://www.amsteel.com",
+            ValidAudience = "Minimal APIs Client"
+        };
+    });
+
 builder.Services.AddAuthorization();
 
 // CORS

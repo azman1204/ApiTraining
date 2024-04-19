@@ -1,12 +1,31 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using WebApplication1.Handlers;
+using WebApplication1.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Add services to the container. (setting)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddTransient<MiddlewareToken>();
+
+// setting for JWT
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+builder.Services.AddAuthorization();
+
+// CORS
+var corsPolicy = new CorsPolicyBuilder("http://127.0.0.1:5500")
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .Build();
+
+builder.Services.AddCors(options => options.AddPolicy("MyCustomPolicy", corsPolicy));
 
 var app = builder.Build();
 
@@ -18,6 +37,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("MyCustomPolicy");
+app.UseMiddleware<MiddlewareToken>(); // using the middleware
+
+// using JWT
+app.UseAuthentication();
+app.UseAuthorization();
 
 // end-node / node
 // Http Verb (RESTful):
@@ -27,8 +52,41 @@ app.UseHttpsRedirection();
 // PATCH  - update part of data,
 // DELETE - delete data
 
+// Login / Authentication
+app.MapPost("/api/auth/login", (LoginRequest request) =>
+{
+    // this in real world should read from DB
+    if (request.Username == "john" &&  request.Password == "1234")
+    {
+        // generate and return JWT. see jwt.io
+        var claims = new List<Claim>()
+        {
+            new Claim(ClaimTypes.Name, request.Username),
+            new Claim(ClaimTypes.Role, "Administrator"),
+            new Claim(ClaimTypes.Role, "User"),
+            new Claim("tenant-id", "42")
+        };
+
+        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("this is my custom secret key for authentication"));
+        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+        var jwtSecurityToken = new JwtSecurityToken(
+            issuer: "https://www.amsteel.com",
+            audience: "Minimal APIs Client",
+            claims: claims,
+            expires: DateTime.UtcNow.AddHours(1), // this token will expire after 1 hour
+            signingCredentials: credentials
+        );
+        var accessToken = new JwtSecurityTokenHandler().WriteToken(jwtSecurityToken);
+        return Results.Ok(accessToken);
+    }
+
+    return Results.BadRequest();
+});
+
+
 // https://localhost:7024/hello-get
-app.MapGet("/hello-get", () => "[GET] Hello World!");
+// RequireAuthorization() - means, we need to carry the correct JWT
+app.MapGet("/hello-get", () => "[GET] Hello World!").RequireAuthorization();
 
 // https://localhost:7024/test-post
 app.MapPost("/hello-post", () => "[POST] Hello World!");
@@ -148,3 +206,5 @@ class HelloHandler
         return $"[INSTANCE METHOD] Hello {name}";
     }
 }
+
+public record LoginRequest(string Username, string Password);

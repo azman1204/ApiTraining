@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.IdentityModel.Tokens;
@@ -67,16 +69,25 @@ app.UseAuthorization();
 app.MapPost("/api/auth/login", (LoginRequest request) =>
 {
     // this in real world should read from DB
-    if (request.Username == "john" &&  request.Password == "1234")
+    if ((request.Username == "John" || request.Username == "Jane") &&  request.Password == "1234")
     {
         // generate and return JWT. see jwt.io
         var claims = new List<Claim>()
         {
             new Claim(ClaimTypes.Name, request.Username),
-            new Claim(ClaimTypes.Role, "Administrator"),
-            new Claim(ClaimTypes.Role, "User"),
+            //new Claim(ClaimTypes.Role, "Administrator"),
+            //new Claim(ClaimTypes.Role, "User"),
             new Claim("tenant-id", "42")
         };
+
+        if (request.Username == "John")
+        {
+            claims.Add(new Claim(ClaimTypes.Role, "Administrator"));
+        }
+        else if (request.Username == "Jane")
+        {
+            claims.Add(new Claim(ClaimTypes.Role, "User"));
+        }
 
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("this is my custom secret key for authentication"));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
@@ -100,10 +111,10 @@ app.MapPost("/api/auth/login", (LoginRequest request) =>
 app.MapGet("/hello-get", () => "[GET] Hello World!").RequireAuthorization();
 
 // https://localhost:7024/test-post
-app.MapPost("/hello-post", () => "[POST] Hello World!");
+app.MapPost("/hello-post", () => "[POST] Hello World!").RequireAuthorization(new AuthorizeAttribute { Roles="Administrator"});
 
 // https://localhost:7024/hello-put
-app.MapPut("/hello-put", () => "[PUT] Hello World!");
+app.MapPut("/hello-put", () => "[PUT] Hello World!").RequireAuthorization(new AuthorizeAttribute { Roles = "User" });
 
 // https://localhost:7024/hello-delete
 app.MapDelete("/hello-delete",  () => "[DELETE] Hello World!");
